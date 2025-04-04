@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    #header {
+      margin-bottom: 20px;
+    }
+    #status {
+      margin: 10px 0;
+    }
+    #navigation {
+      margin-top: 20px;
+    }
+    #connecting {
+      margin-bottom: 10px;
+    }
+    #server {
+      padding: 5px;
+      width: 300px;
+      margin-right: 10px;
+    }
+    button {
+      padding: 6px 12px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #connected {
+      margin-top: 10px;
+    }
+    #send_txt {
+      padding: 5px;
+      width: 300px;
+      margin-right: 10px;
+    }
+    #output {
+      margin-top: 20px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      height: 400px;
+      overflow-y: auto;
+    }
+    #output p {
+      margin: 5px 0;
+    }
+    .green {
+      color: green;
+    }
+    .red {
+      color: red;
+    }
+    .blue {
+      color: blue;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>WebSocket Client</h1>
+    <div id="status"></div>
+  </div>
+
+  <div id="navigation">
+    <p id="connecting">
+      <input type="text" id="server" value="">
+      <button type="button" onclick="toggle_connection()">Toggle Connection</button>
+    </p>
+    
+    <div id="connected" style="display: none;">
+      <p>
+        <input type="text" id="send_txt" value="">
+        <button type="button" onclick="sendTxt()">Send</button>
+      </p>
+    </div>
+
+    <div id="content">
+      <button id="clear" onclick="clearScreen()">Clear Text</button>
+      <div id="output"></div>
+    </div>
+  </div>
+
+  <script>
+    var websocket;
+    
+    // Initialize when the document is ready
+    document.addEventListener('DOMContentLoaded', init);
+    
+    function init() {
+      // Set default WebSocket server URL
+      document.getElementById('server').value = "ws://" + window.location.hostname + ":8089";
+      
+      // Check WebSocket support
+      if (!("WebSocket" in window)) {
+        document.getElementById('status').innerHTML = '<p><span class="red">WebSockets are not supported</span></p>';
+        document.getElementById('navigation').style.display = 'none';
+      } else {
+        document.getElementById('status').innerHTML = '<p><span class="green">WebSockets are supported</span></p>';
+        connect();
+      }
+      
+      // Hide connected UI initially
+      document.getElementById('connected').style.display = 'none';
+    }
+
+    function connect() {
+      const wsHost = document.getElementById('server').value;
+      websocket = new WebSocket(wsHost);
+      
+      showScreen('<b>Connecting to: ' + wsHost + '</b>');
+      
+      websocket.onopen = function(evt) { onOpen(evt) };
+      websocket.onclose = function(evt) { onClose(evt) };
+      websocket.onmessage = function(evt) { onMessage(evt) };
+      websocket.onerror = function(evt) { onError(evt) };
+    }
+
+    function disconnect() {
+      websocket.close();
+    }
+
+    function toggle_connection() {
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        disconnect();
+      } else {
+        connect();
+      }
+    }
+
+    function sendTxt() {
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        const txt = document.getElementById('send_txt').value;
+        websocket.send(txt);
+        showScreen('sending: ' + txt);
+      } else {
+        showScreen('WebSocket is not connected');
+      }
+    }
+
+    function onOpen(evt) {
+      showScreen('<span class="green">CONNECTED</span>');
+      document.getElementById('connected').style.display = 'block';
+    }
+
+    function onClose(evt) {
+      showScreen('<span class="red">DISCONNECTED</span>');
+      document.getElementById('connected').style.display = 'none';
+    }
+
+    function onMessage(evt) {
+      // Special handling for different message types
+      const message = evt.data;
+      
+      if (message === "ping") {
+        // Respond to server ping
+        websocket.send("pong");
+        return;
+      }
+      
+      // Display normal messages
+      showScreen('<span class="blue">RESPONSE: ' + message + '</span>');
+      
+      // If this is a contacts response, try to parse it
+      if (message.startsWith("Contacts Get Complete!")) {
+        try {
+          const contactsData = message.split('Contacts Get Complete!  ')[1];
+          const contacts = contactsData.split("||").map(contact => {
+            const [email, taskStr] = contact.split("+?+");
+            let task;
+            try {
+              task = JSON.parse(taskStr);
+            } catch (e) {
+              task = { error: "Failed to parse task data" };
+            }
+            return { email, task };
+          });
+          
+          console.log("Parsed contacts:", contacts);
+        } catch (e) {
+          console.error("Error parsing contacts data:", e);
+        }
+      }
+    }
+
+    function onError(evt) {
+      showScreen('<span class="red">ERROR: ' + evt.data + '</span>');
+    }
+
+    function showScreen(txt) {
+      const output = document.getElementById('output');
+      const p = document.createElement('p');
+      p.innerHTML = txt;
+      output.prepend(p);
+    }
+
+    function clearScreen() {
+      document.getElementById('output').innerHTML = "";
+    }
+  </script>
+</body>
+</html>

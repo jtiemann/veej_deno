@@ -1,0 +1,29 @@
+{
+  "name": "v1_rel_deno",
+  "version": "0.1.0",
+  "description": "A Deno-based messaging backend with WebSocket support",
+  "scripts": {
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write server.ts",
+    "dev": "deno run --watch --allow-net --allow-env --allow-read --allow-write server.ts",
+    "init-db": "deno run --allow-net --allow-env --allow-read scripts/init_db.ts",
+    "setup-media": "deno run --allow-net --allow-env --allow-read --allow-write scripts/setup_media.ts",
+    "test": "deno test --allow-net --allow-env --allow-read",
+    "compile": "deno compile --allow-net --allow-env --allow-read --allow-write server.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/v1_rel_deno.git"
+  },
+  "keywords": [
+    "deno",
+    "websocket",
+    "messaging",
+    "backend"
+  ],
+  "author": "Your Name",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/yourusername/v1_rel_deno/issues"
+  },
+  "homepage": "https://github.com/yourusername/v1_rel_deno#readme"
+}

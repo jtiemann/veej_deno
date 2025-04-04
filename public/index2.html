@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VChat App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,600,700" rel="stylesheet" type="text/css">
+  <link rel="stylesheet" type="text/css" href="/static/main.css" />
+  <style>
+    img.fullscreen {
+      max-height: 100%;
+      max-width: 100%;
+    }   
+  </style>
+</head>
+<body style="display: none;">
+  <div id="page1" data-role="page">
+    <header id="page1_header" data-role="header">
+      <h1>V Contacts</h1>
+    </header>
+    <div hidden type='text' id="server" value=""></div>
+    <article id="content" data-role="content">
+      <ul id="output" data-role="listview" data-filter="true" data-inset="true">
+      </ul>
+    </article>
+    <footer data-role="footer" data-position="fixed">
+      <nav data-role="navbar">
+        <ul>
+          <li><a href="#page1" data-icon="home" class="all-contacts">Contacts</a></li>
+          <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+          <li><a href="#send" data-icon="mail">Write</a></li>
+        </ul>
+      </nav>
+    </footer> 
+  </div><!-- Page1 -->
+
+  <div data-role="page" id="chatview">
+    <header data-role="header">
+      <h1 id="name_header2"></h1>
+    </header>
+    <article id="content2" data-role="content2">
+      <div id="sendmessage">
+        <textarea data-role="none" id="sminput">Send message...</textarea>
+        <button data-role="none" id="sendcv" data-email=""></button>
+      </div>
+      <div id="chat-messages" class="animate">
+      </div>
+    </article>
+    <footer data-role="footer" data-position="fixed">
+      <nav data-role="navbar">
+        <ul>
+          <li><a href="#page1" data-icon="home">Contacts</a></li>
+          <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+          <li><a href="#send" data-icon="mail">Write</a></li>
+        </ul>
+      </nav>
+    </footer> 
+  </div><!-- Page chatview -->
+
+  <div data-role="page" id="mesg">
+    <header data-role="header">
+      <h1 id="name_header"></h1>
+    </header>
+    <article id="content3" data-role="content3">
+      <div id="sendmessage2">
+        <textarea data-role="none" id="sminput2">Send message...</textarea>
+        <button data-role="none" id="sendcv2" data-email=""></button>
+      </div>
+      <div id="chat-messages-all" class="animate">
+      </div>
+    </article>
+    <footer data-role="footer" data-position="fixed">
+      <nav data-role="navbar">
+        <ul>
+          <li><a href="#page1" data-icon="home">Contacts</a></li>
+          <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+          <li><a href="#send" data-icon="mail">Write</a></li>
+        </ul>
+      </nav>
+    </footer> 
+  </div><!-- Page Mesg -->
+
+  <div data-role="page" id="mesg_detail">
+    <div id="loader" hidden class="loader"></div>
+    <header data-role="header">
+      <h1 id="name_header_mesg_detail"></h1>
+    </header>
+    <article id="content4" data-role="content4">
+      <p id="output3" data-filter="true">
+      </p>
+      <div id="imageAttachments"></div>
+    </article>
+    <footer data-role="footer" data-position="fixed">
+      <nav data-role="navbar">
+        <ul>
+          <li><a href="#page1" data-icon="home">Contacts</a></li>
+          <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+          <li><a href="#send" data-icon="mail">Write</a></li>
+        </ul>
+      </nav>
+    </footer> 
+  </div><!-- Page mesg_detail -->
+
+  <div data-role="page" id="recipients" data-dialog="true">
+    <div id="selectRecipientWrapper2" class="ui-field-contain">
+      <select name="msg_recipient2" id="msg_recipient2"> 
+      </select>
+    </div>
+    <a id="recip_a" href="#mesg">continue send</a>
+  </div>
+
+  <div data-role="page" id="send" data-dialog="true">
+    <header data-role="header">
+      <h1 id="name_header_send"></h1>
+    </header>
+    <article id="content5" data-role="content5">
+      <p id="output4">
+        <div data-role="main" class="ui-content">
+          <div id="selectRecipientWrapper" class="ui-field-contain">
+            <select name="msg_recipient" id="msg_recipient"> 
+            </select>
+          </div>
+          <div class="ui-field-contain" style="display:flex;">
+            <textarea required style="width:75%;" type="text" name="msg_body_text" id="msg_body_text"></textarea>
+            <input id="submitMsg" type="submit" data-inline="true" value="Send">
+          </div>
+          <p><b>Note:</b> The text area will automatically grow to fit new lines as you type some text.</p>
+        </div>
+      </p>
+
+      <div id="photo-controls">
+        <button id="capturePhoto">Capture Photo</button>
+        <button id="choosePhoto">Choose Photo</button>
+        <img style="display:none;width:100px;height:100px;" id="smallImage" src="" />
+        <img style="display:none;width:100%;height:100%;" id="largeImage" src="" />
+      </div>
+    </article>
+    <footer data-role="footer" data-position="fixed">
+      <nav data-role="navbar">
+        <ul>
+          <li><a href="#page1" data-icon="home">Contacts</a></li>
+          <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+          <li><a href="#send" data-icon="mail">Write</a></li>
+        </ul>
+      </nav>
+    </footer> 
+  </div><!-- Page send -->
+
+  <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
+  <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
