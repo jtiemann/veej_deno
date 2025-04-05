@@ -23,14 +23,11 @@ export function initRoutes(router: Router): void {
   // Authentication routes
   router.post("/checkLogin", checkLogin);
   
-  // Image routes
-  router.get("/images/:path*", getImage);
-  router.get("/images/:user/public_links/:filename", getUserImage);
+  // Image routes - Order matters: more specific routes first
+  // Handles images like /images/user/public_links/160/avatar.jpg
   router.get("/images/:user/public_links/:size/:filename", getUserImage);
-  
-  // Fallback for unfound routes
-  router.all("/(.*)", (ctx) => {
-    ctx.response.status = 404;
-    ctx.response.body = "Not found";
-  });
+   // Handles images like /images/user/public_links/avatar.jpg
+  router.get("/images/:user/public_links/:filename", getUserImage);
+  // Handles general images/files within the media directory, e.g., /images/avatar_placeholder.png
+  router.get("/images/:path*", getImage);
 }

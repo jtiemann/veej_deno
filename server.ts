@@ -41,23 +41,6 @@ app.use(oakCors({
   credentials: true,
 }));
 
-// Set up routes
-initRoutes(router);
-app.use(router.routes());
-app.use(router.allowedMethods());
-
-// Serve static files
-app.use(async (context, next) => {
-  try {
-    await context.send({
-      root: `${Deno.cwd()}/public`,
-      index: "index.html",
-    });
-  } catch {
-    await next();
-  }
-});
-
 // Error handler
 app.use(async (context, next) => {
   try {
@@ -68,6 +51,28 @@ app.use(async (context, next) => {
     context.response.body = { error: "Internal server error" };
   }
 });
+
+app.use(async (context, next) => {
+  try {
+    // Attempt to send static file from the 'public' directory
+    await context.send({
+      root: `${Deno.cwd()}/public`,
+      index: "index.html", // Default file to serve for '/'
+    });
+  } catch (e) {
+     // If file is not found (context.send throws), proceed to next middleware (API router)
+     // Only log actual errors, not file-not-found scenarios which are expected
+    if (e.name !== 'NotFound') {
+        console.error("Static file serving error:", e)
+    }
+    await next(); // Hand over to API router if static file not found
+  }
+});
+
+// Set up routes
+initRoutes(router);
+app.use(router.routes());
+app.use(router.allowedMethods());
 
 // Start WebSocket server
 setupWebSocketServer(config.wsPort);
