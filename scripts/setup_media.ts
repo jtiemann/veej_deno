@@ -75,6 +75,11 @@ async function setupMediaDirectories() {
     throw error;
   }
 }
+const staticDir = join(Deno.cwd(), "public", "static");
+await ensureDir(staticDir);
+await Deno.copyFile(placeholderPath, join(staticDir, "avatar_placeholder.png"));
+console.log(`Copied placeholder avatar to static directory: ${join(staticDir, "avatar_placeholder.png")}`);
+
 
 // Run the setup if script is executed directly
 if (import.meta.main) {

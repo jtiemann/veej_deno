@@ -31,6 +31,7 @@
           <li><a href="#page1" data-icon="home" class="all-contacts">Contacts</a></li>
           <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
           <li><a href="#send" data-icon="mail">Write</a></li>
+          <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
         </ul>
       </nav>
     </footer> 
@@ -54,6 +55,7 @@
           <li><a href="#page1" data-icon="home">Contacts</a></li>
           <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
           <li><a href="#send" data-icon="mail">Write</a></li>
+          <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
         </ul>
       </nav>
     </footer> 
@@ -77,6 +79,7 @@
           <li><a href="#page1" data-icon="home">Contacts</a></li>
           <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
           <li><a href="#send" data-icon="mail">Write</a></li>
+          <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
         </ul>
       </nav>
     </footer> 
@@ -98,6 +101,7 @@
           <li><a href="#page1" data-icon="home">Contacts</a></li>
           <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
           <li><a href="#send" data-icon="mail">Write</a></li>
+          <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
         </ul>
       </nav>
     </footer> 
@@ -143,10 +147,78 @@
           <li><a href="#page1" data-icon="home">Contacts</a></li>
           <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
           <li><a href="#send" data-icon="mail">Write</a></li>
+          <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
         </ul>
       </nav>
     </footer> 
   </div><!-- Page send -->
+  <!-- Add to public/index2.html, after the send div but before the closing body tag -->
+
+<div data-role="page" id="add_friend" data-dialog="true">
+  <header data-role="header">
+    <h1>Add Friend</h1>
+  </header>
+  <article id="content6" data-role="content6">
+    <div data-role="main" class="ui-content">
+      <div class="ui-field-contain">
+        <label for="friend_email">Friend's Email:</label>
+        <input type="email" name="friend_email" id="friend_email" placeholder="friend@example.com" required>
+      </div>
+      <div class="ui-field-contain">
+        <label for="friend_name">Friend's Name (optional):</label>
+        <input type="text" name="friend_name" id="friend_name" placeholder="John Doe">
+      </div>
+      <div class="ui-field-contain">
+        <label for="invitation_message">Invitation Message (optional):</label>
+        <textarea name="invitation_message" id="invitation_message" placeholder="Hey! I'd like to connect with you on VChat."></textarea>
+      </div>
+      <div class="ui-field-contain">
+        <fieldset data-role="controlgroup" data-type="horizontal">
+          <legend>Add friend by:</legend>
+          <input type="radio" name="add_method" id="add_direct" value="direct" checked="checked">
+          <label for="add_direct">Direct Add</label>
+          <input type="radio" name="add_method" id="add_invite" value="invite">
+          <label for="add_invite">Send Invitation</label>
+        </fieldset>
+      </div>
+      <button id="submitAddFriend" type="submit" data-inline="true">Add Friend</button>
+      <div id="add_friend_status" style="color: green; margin-top: 10px;"></div>
+    </div>
+  </article>
+  <footer data-role="footer" data-position="fixed">
+    <nav data-role="navbar">
+      <ul>
+        <li><a href="#page1" data-icon="home">Contacts</a></li>
+        <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+        <li><a href="#send" data-icon="mail">Write</a></li>
+        <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
+      </ul>
+    </nav>
+  </footer> 
+</div><!-- Page add_friend -->
+
+<!-- Add a new page for invitation management -->
+<div data-role="page" id="invitations">
+  <header data-role="header">
+    <h1>Friend Invitations</h1>
+  </header>
+  <article id="content7" data-role="content7">
+    <ul id="invitations_list" data-role="listview" data-inset="true">
+      <!-- Invitations will be added here dynamically -->
+    </ul>
+  </article>
+  <footer data-role="footer" data-position="fixed">
+    <nav data-role="navbar">
+      <ul>
+        <li><a href="#page1" data-icon="home">Contacts</a></li>
+        <li><a href="#mesg" data-icon="info" class="all-messages">Messages</a></li>
+        <li><a href="#send" data-icon="mail">Write</a></li>
+        <li><a href="#add_friend" data-icon="plus" class="add-friend-button">Add Friend</a></li>
+
+      </ul>
+    </nav>
+  </footer> 
+</div><!-- Page invitations -->
 
   <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
   <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>

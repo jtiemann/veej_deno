@@ -323,16 +323,23 @@ function renderMessage(e, data) {
   };
 
   function sendMsg(Msg) {
-      if(websocket.readyState == websocket.OPEN){
-          websocket.send(Msg);
-          //showScreen('sendingMsg: ' + Msg);
-      }
-      else {
-           connect();
-           showScreen('websocket was not connected');
-           setTimeout(()=>sendMsg(Msg), 1500)
-      };
-  };
+    if (!websocket) {
+        // WebSocket not initialized yet, try to connect first
+        connect();
+        // Then queue up the message to be sent after a short delay
+        setTimeout(() => sendMsg(Msg), 1500);
+        return;
+    }
+    
+    if (websocket.readyState == websocket.OPEN) {
+        websocket.send(Msg);
+    }
+    else {
+        connect();
+        showScreen('websocket was not connected');
+        setTimeout(() => sendMsg(Msg), 1500);
+    }
+}
 
   function onOpen(evt) {
       $("#output").empty()
@@ -597,6 +604,9 @@ const messageGetComplete = (eventData) => {
         );
       }
     });
+    
+    // After processing messages, check for invitations
+    checkFriendInvitations();
   } catch (error) {
     console.error("Error processing messages:", error);
     $("#chat-messages-all").html(`<p>Error loading messages: ${error.message}</p>`);
@@ -645,51 +655,261 @@ const messageGetComplete = (eventData) => {
     //bring back req. filename and cache
     veej.addToCache([imageFilename, imageData])
     document.getElementById('imageAttachments').appendChild(i)
-    SpinnerDialog.hide() // Assuming SpinnerDialog is defined elsewhere
-  }
-  const receiverFns = R.cond([
-    [(ed) => ed.startsWith("Authenticated!"), authenticated],
-    [(ed) => ed.startsWith("FCM Token Add!"), fcmTokenAdd],
-    [(ed) => ed.startsWith("Contacts Get Complete!"), contactsGetComplete],
-    [(ed) => ed.match(/Message Get Complete!/), messageGetComplete],
-    [(ed) => ed.match(/Message From Complete!/), messageFromComplete],
-    [(ed) => ed.startsWith("Message Sent!"), messageSent],
-    [(ed) => ed.match(/Photo Saved!/), photoSaved],
-    [(ed) => ed.match(/Media Response! /), mediaResponse],
-    // Default case
-    [(ed) => true, (msg) => console.log("Received unhandled message:", msg.substring(0, 100))]
-  ]);
-
-  const senderFns = R.cond([
-    [(fn, msg)=>msg.startsWith("authenticate::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("FCM Message::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("My Contacts:"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("My Messages::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("All Messages::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("Send Message::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("My PhotoData::"), (fn,msg)=>fn(msg)],
-    [(fn, msg)=>msg.startsWith("Media Message::"), (fn,msg)=>fn(msg)],
-    // Add a default case for any other message type
-    [(fn, msg)=>true, (fn,msg)=>fn(msg)]
-    ])
-
-  // Set up a heartbeat to keep the connection alive
-  function startHeartbeat() {
-    window.heartbeatInterval = setInterval(function() {
-      if(websocket.readyState === websocket.OPEN) {
-        websocket.send("ping");
-      } else {
-        connect();
-      }
-    }, 30000); // Send ping every 30 seconds
-  }
-
-  // Clear the heartbeat on disconnect
-  function stopHeartbeat() {
-    if(window.heartbeatInterval) {
-      clearInterval(window.heartbeatInterval);
+    if (typeof SpinnerDialog !== 'undefined') {
+      SpinnerDialog.hide();
     }
   }
+
+// Friend Management Functions
+
+// Store pending invitations
+let pendingInvitations = [];
+
+// Add event handler for submitting add friend form
+$(document).on("click", "#submitAddFriend", function(e) {
+  e.preventDefault();
+  
+  const friendEmail = $("#friend_email").val();
+  const friendName = $("#friend_name").val();
+  const invitationMessage = $("#invitation_message").val();
+  const addMethod = $("input[name='add_method']:checked").val();
+  
+  if (!friendEmail) {
+    $("#add_friend_status").css("color", "red").text("Please enter your friend's email address");
+    return;
+  }
+  
+  if (addMethod === "direct") {
+    // Direct add contact
+    console.log("Adding contact directly:", friendEmail);
+    senderFns(sendMsg, `Add Contact::${friendEmail}::${friendName}`);
+  } else {
+    // Send invitation
+    console.log("Sending invitation to:", friendEmail);
+    senderFns(sendMsg, `Invite Friend::${friendEmail}::${invitationMessage}`);
+  }
+  
+  // Clear form and show status
+  $("#add_friend_status").css("color", "green").text("Processing request...");
+});
+
+// Function to check for friend invitations
+function checkFriendInvitations() {
+  // We need to filter the messages to find invitations
+  if (typeof e_ts !== 'undefined') {
+    pendingInvitations = e_ts.filter(msg => {
+      try {
+        // Check if task exists and has the right type
+        return msg[1] && 
+               msg[1].task && 
+               msg[1].task.type === 'vFriendInvite' && 
+               msg[1].task.data && 
+               msg[1].task.data.invitation === true;
+      } catch (err) {
+        return false;
+      }
+    });
+    
+    // Update invitations list if we're on that page
+    if ($("body").pagecontainer("getActivePage").attr("id") === "invitations") {
+      updateInvitationsList();
+    }
+    
+    // Update badge
+    if (pendingInvitations.length > 0) {
+      $("#invitation-badge").text(pendingInvitations.length).show();
+    } else {
+      $("#invitation-badge").hide();
+    }
+  }
+}
+
+// Function to update the invitations list UI
+function updateInvitationsList() {
+  const $list = $("#invitations_list");
+  $list.empty();
+  
+  if (pendingInvitations.length === 0) {
+    $list.append(`<li>No pending invitations</li>`);
+    return;
+  }
+  
+  pendingInvitations.forEach((invitation, index) => {
+    try {
+      const data = invitation[1].task.data;
+      const sender = data.respondTo;
+      const message = data.message || "Would like to connect with you";
+      const when = new Date(data.when).toLocaleString();
+      const guid = data.code;
+      
+      $list.append(`
+        <li>
+          <div class="invitation-item">
+            <h3>${sender}</h3>
+            <p>${message}</p>
+            <p class="invitation-time">Sent: ${when}</p>
+            <div class="ui-grid-a">
+              <div class="ui-block-a">
+                <button class="accept-invitation ui-btn ui-corner-all ui-shadow" data-guid="${guid}">Accept</button>
+              </div>
+              <div class="ui-block-b">
+                <button class="decline-invitation ui-btn ui-corner-all ui-shadow" data-guid="${guid}">Decline</button>
+              </div>
+            </div>
+          </div>
+        </li>
+      `);
+    } catch (err) {
+      console.error("Error rendering invitation:", err);
+    }
+  });
+  
+  // Refresh the listview to apply styles
+  if ($list.hasClass("ui-listview")) {
+    $list.listview("refresh");
+  }
+}
+
+// Handle accepting an invitation
+$(document).on("click", ".accept-invitation", function() {
+  const guid = $(this).data("guid");
+  console.log("Accepting invitation:", guid);
+  senderFns(sendMsg, `Accept Invitation::${guid}`);
+});
+
+// Handle declining an invitation
+$(document).on("click", ".decline-invitation", function() {
+  const guid = $(this).data("guid");
+  console.log("Declining invitation:", guid);
+  // For now just remove it from the UI since we don't have a decline handler
+  $(this).closest("li").remove();
+});
+
+// Updated receiverFns with friend management responses
+const receiverFns = R.cond([
+  [(ed) => ed.startsWith("Authenticated!"), authenticated],
+  [(ed) => ed.startsWith("FCM Token Add!"), fcmTokenAdd],
+  [(ed) => ed.startsWith("Contacts Get Complete!"), contactsGetComplete],
+  [(ed) => ed.match(/Message Get Complete!/), messageGetComplete],
+  [(ed) => ed.match(/Message From Complete!/), messageFromComplete],
+  [(ed) => ed.startsWith("Message Sent!"), messageSent],
+  [(ed) => ed.match(/Photo Saved!/), photoSaved],
+  [(ed) => ed.match(/Media Response! /), mediaResponse],
+  // Add these new conditions
+  [(ed) => ed.startsWith("Contact Added!"), (msg) => {
+    console.log("Contact added:", msg);
+    $("#add_friend_status").css("color", "green").text("Contact added successfully!");
+    setTimeout(() => { $.mobile.navigate("#page1"); }, 1500);
+  }],
+  [(ed) => ed.startsWith("Contact Exists!"), (msg) => {
+    console.log("Contact exists:", msg);
+    $("#add_friend_status").css("color", "orange").text("This contact already exists in your list.");
+  }],
+  [(ed) => ed.startsWith("Invitation Sent!"), (msg) => {
+    console.log("Invitation sent:", msg);
+    $("#add_friend_status").css("color", "green").text("Invitation sent successfully!");
+    setTimeout(() => { $.mobile.navigate("#page1"); }, 1500);
+  }],
+  [(ed) => ed.startsWith("Invitation Accepted!"), (msg) => {
+    console.log("Invitation accepted:", msg);
+    // Refresh contacts and navigate to contacts page
+    senderFns(sendMsg, "My Contacts:");
+    $.mobile.navigate("#page1");
+  }],
+  // Default case
+  [(ed) => true, (msg) => console.log("Received unhandled message:", msg.substring(0, 100))]
+]);
+
+// Updated senderFns with friend management messages
+const senderFns = R.cond([
+  [(fn, msg)=>msg.startsWith("Send Message::"), (fn,msg)=>fn(msg)],
+  [(fn, msg)=>msg.startsWith("My PhotoData::"), (fn,msg)=>fn(msg)],
+  [(fn, msg)=>msg.startsWith("Media Message::"), (fn,msg)=>fn(msg)],
+  // Add these new conditions
+  [(fn, msg)=>msg.startsWith("Add Contact::"), (fn,msg)=>fn(msg)],
+  [(fn, msg)=>msg.startsWith("Invite Friend::"), (fn,msg)=>fn(msg)],
+  [(fn, msg)=>msg.startsWith("Accept Invitation::"), (fn,msg)=>fn(msg)],
+  // Default case
+  [(fn, msg)=>true, (fn,msg)=>fn(msg)]
+]);
+
+function onOpen(evt) {
+  $("#output").empty()
+  showScreen('<span style="color: green;">CONNECTED </span>');
+  //   TODO: REQUEST LOGIN CREDENTIALS HERE
+  let user = memoized_getLoginCredentials()
+  //let password = localStorage.getItem("password")
+  senderFns(sendMsg,"authenticate::" + user + "::" + "todo:psw"); // Password not used in deno version
+  $("#connected").fadeIn('slow');
+  $("#content").fadeIn('slow');
+  
+  // Check for any pending messages to send
+  setTimeout(() => {
+      if ($("body").pagecontainer("getActivePage").attr("id") === "page1") {
+          senderFns(sendMsg, "All Messages::");
+      }
+  }, 1000);
+}
+
+// Add navigation to invitations page
+$(document).on("pageshow", "#page1", function() {
+  // Add button for checking invitations
+  if (!$("#check-invitations-btn").length) {
+    $("#page1_header").after(`
+      <button id="check-invitations-btn" class="ui-btn ui-corner-all ui-shadow ui-btn-inline">
+        Check Invitations <span id="invitation-badge" class="ui-btn-corner-all" style="display:none;">0</span>
+      </button>
+    `);
+    
+    // Add click handler
+    $("#check-invitations-btn").on("click", function() {
+      $.mobile.navigate("#invitations");
+    });
+  }
+  
+  // Only request messages if websocket is connected
+  if (websocket && websocket.readyState === websocket.OPEN) {
+    // Request all messages to check for invitations
+    senderFns(sendMsg, "All Messages::");
+  } else {
+    console.log("WebSocket not ready yet, will try to fetch messages after connection");
+    // Could set a flag to fetch messages once connected
+  }
+});
+
+// When "All Messages" response comes in, check for invitations
+$(document).on("pagecontainershow", function(event, ui) {
+  const pageId = $("body").pagecontainer("getActivePage").attr("id");
+  
+  if (pageId === "invitations") {
+    checkFriendInvitations();
+    updateInvitationsList();
+  }
+});
+
+// Add some CSS for invitation styling
+$(document).ready(function() {
+  $("head").append(`
+    <style>
+      .invitation-item {
+        padding: 10px;
+      }
+      .invitation-time {
+        font-size: 12px;
+        color: #888;
+        font-style: italic;
+      }
+      #invitation-badge {
+        background-color: red;
+        color: white;
+        border-radius: 50%;
+        padding: 2px 6px;
+        font-size: 12px;
+        margin-left: 5px;
+      }
+    </style>
+  `);
+});
 
   function onMessage(evt) {
     // Handle pong response from server
@@ -755,21 +975,31 @@ const messageGetComplete = (eventData) => {
     stopHeartbeat();
   };
 
-// Simplified showVContacts function
+// Simplified showVContacts function with fixed image path handling
 function showVContacts(txt, el) {
   const parts = txt.split("::");
   const avatar = parts[0] || "avatar_placeholder.png";
   const name = parts[1] || "Unknown";
   const email = parts[2] || "";
 
-  // Use relative paths for images - assuming static files are served from /static
-  const imagePath = "/static/"; // Update if needed for Deno structure
+  // Check if we're using a relative path or a full path
+  // Handle the avatar path more robustly
+  let avatarPath;
+  
+  // If avatar is just a filename (like "avatar_placeholder.png")
+  if (!avatar.includes('/')) {
+    avatarPath = "/static/" + avatar;
+  } 
+  // If it's already a path (like "/images/user/...")
+  else {
+    avatarPath = avatar;
+  }
 
   $(el).append(`
     <li>
       <a href="#chatview" data-name="${name}" data-avatar="${avatar}" data-email="${email}" class="mesg_link ui-link-inherit">
         <div class="friend clearfix">
-          <img src="${imagePath}avatar_placeholder.png" alt="${name}" class="friend-img">
+          <img src="${avatarPath}" alt="${name}" class="friend-img" onerror="this.src='/static/avatar_placeholder.png'">
           <p>
             <strong>${name}</strong><br/>
             <span>${email}</span>
@@ -780,36 +1010,69 @@ function showVContacts(txt, el) {
   `);
 }
 
-  function showVChatMessages(txt, el, append=true) {
-    let options = {
-          weekday: "long", year: "numeric", month: "short",
-          day: "numeric", hour: "2-digit", minute: "2-digit"
-      };
-    let ta = txt.split("::")
-    let message = ta[1]
-    let sender = ta[2]
-    let senderClass = sender == memoized_getLoginCredentials() ? " right " : ""
-    let recipient = ta[3]
-    // let base = "https://tbone.dyndns-ip.com/src/" // Original Erlang base
-    // Assuming images are served from /images in Deno version
-    let base = "/images/" // Updated for Deno structure
-    let avatar = "avatar_placeholder.png"  //txt.split("::")[0]
-    let when = (new Date(ta[4])).toLocaleTimeString("en-us", options)
-    let counter = ta[5]
-    let ava = sender !== memoized_getLoginCredentials() ? sender : recipient
-    // if sender is me, then add right to class of message
-    const mes = `
-              <a href="#mesg_detail" data-count="${counter}" data-message="${message}" data-name="${name}" data-avatar="${avatar}" data-email="${recipient}" class="mesg_detail_link ui-link-inherit">
-                <div class="message ${senderClass}">
-                  <img src="${base + sender + "/public_links/160/" + avatar}" /> <div class="bubble">
-                      ${message}
-                        <div class="corner"></div>
-                        <span>${dateFns.distanceInWordsToNow(when)}</span>
-                    </div>
-                </div>
-              </a>`
-    append ? $(el).append(mes) : $(el).prepend(mes)
-  };
+// Add this function to your app.js as a replacement for dateFns
+function formatTimeAgo(date) {
+  const now = new Date();
+  const diffMs = now - date;
+  
+  // Convert to appropriate time units
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  
+  if (diffSecs < 60) {
+    return "just now";
+  } else if (diffMins < 60) {
+    return diffMins + " minute" + (diffMins > 1 ? "s" : "") + " ago";
+  } else if (diffHours < 24) {
+    return diffHours + " hour" + (diffHours > 1 ? "s" : "") + " ago";
+  } else if (diffDays < 30) {
+    return diffDays + " day" + (diffDays > 1 ? "s" : "") + " ago";
+  } else if (diffMonths < 12) {
+    return diffMonths + " month" + (diffMonths > 1 ? "s" : "") + " ago";
+  } else {
+    return diffYears + " year" + (diffYears > 1 ? "s" : "") + " ago";
+  }
+}
+
+// Replace the showVChatMessages function with this updated version
+function showVChatMessages(txt, el, append=true) {
+  let options = {
+        weekday: "long", year: "numeric", month: "short",
+        day: "numeric", hour: "2-digit", minute: "2-digit"
+    };
+  let ta = txt.split("::")
+  let message = ta[1]
+  let sender = ta[2]
+  let senderClass = sender == memoized_getLoginCredentials() ? " right " : ""
+  let recipient = ta[3]
+  // let base = "https://tbone.dyndns-ip.com/src/" // Original Erlang base
+  // Assuming images are served from /images in Deno version
+  let base = "/images/" // Updated for Deno structure
+  let avatar = "avatar_placeholder.png"  //txt.split("::")[0]
+  let when = (new Date(ta[4])).toLocaleTimeString("en-us", options)
+  let counter = ta[5]
+  let ava = sender !== memoized_getLoginCredentials() ? sender : recipient
+  
+  // Format time ago using our custom function instead of dateFns
+  const timeAgo = formatTimeAgo(new Date(ta[4]));
+  
+  // if sender is me, then add right to class of message
+  const mes = `
+            <a href="#mesg_detail" data-count="${counter}" data-message="${message}" data-name="${name}" data-avatar="${avatar}" data-email="${recipient}" class="mesg_detail_link ui-link-inherit">
+              <div class="message ${senderClass}">
+                <img src="${base + sender + "/public_links/160/" + avatar}" onerror="this.src='/static/avatar_placeholder.png'" /> <div class="bubble">
+                    ${message}
+                      <div class="corner"></div>
+                      <span>${timeAgo}</span>
+                  </div>
+              </div>
+            </a>`
+  append ? $(el).append(mes) : $(el).prepend(mes)
+};
 
   function renderVChatMessage(payload, counter, el, append=true) {
     let options = {
@@ -829,7 +1092,7 @@ function showVContacts(txt, el) {
     const mes = `
               <a href="#mesg_detail" data-count="${counter}" data-message="${message}" data-name="${name}" data-avatar="${avatar}" data-email="${recipient}" class="mesg_detail_link ui-link-inherit">
                 <div class="message ${senderClass}">
-                  <img src="${base + sender + "/public_links/160/" + avatar}" /> <div class="bubble">
+                  <img src="${base + sender + "/public_links/160/" + avatar}" onerror="this.src='/static/avatar_placeholder.png'" /> <div class="bubble">
                       ${message}
                         <div class="corner"></div>
                         </div>
@@ -862,8 +1125,8 @@ function showVContacts(txt, el) {
     $(el).append(`
       <li data-icon="carat-r" class="ui-li ">
              <a href="#mesg_detail" data-count="${counter}" data-message="${message}" data-name="${name}" data-avatar="${avatar}" data-email="${recipient}" class="mesg_detail_link ui-btn ui-icon-carat-r ui-btn-icon-right ui-link-inherit">
-              <img src="${base + sender + "/public_links/160/" + avatar}" width="40" class=""> <p class="when"> ${when}</p>
-              <img src="${base + recipient + "/public_links/160/" + avatar}" width="40" class=""> <p class="ui-li-desc">${message}</p>
+              <img src="${base + sender + "/public_links/160/" + avatar}" width="40" onerror="this.src='/static/avatar_placeholder.png'" class=""> <p class="when"> ${when}</p>
+              <img src="${base + recipient + "/public_links/160/" + avatar}" width="40" onerror="this.src='/static/avatar_placeholder.png'" class=""> <p class="ui-li-desc">${message}</p>
                </a>
           <span>&nbsp;</span>
         </li>
@@ -1153,87 +1416,94 @@ const getStartingDate = () => {
   }
   function onDeviceReady() {
     // fires when app open
-    window.plugins.intent.setNewIntentHandler(
-      function (Intent) {
-        console.log("huh ",Intent);
-        clipUriToUrl(Intent)
-    });
-    // fires when app closed
-    window.plugins.intent.getCordovaIntent(
-      function (Intent) {
-        console.log("huh2", Intent);
-        clipUriToUrl(Intent)
-      },
-      function () {
-        console.log('Error');
-    });
+    if (window.plugins && window.plugins.intent) {
+      window.plugins.intent.setNewIntentHandler(
+        function (Intent) {
+          console.log("huh ",Intent);
+          clipUriToUrl(Intent)
+      });
+      // fires when app closed
+      window.plugins.intent.getCordovaIntent(
+        function (Intent) {
+          console.log("huh2", Intent);
+          clipUriToUrl(Intent)
+        },
+        function () {
+          console.log('Error');
+      });
+    }
 
-    FCMPlugin.onTokenRefresh(function(token){
-      if (msgBody.length === 0) {
-        navigator.notification.alert("Token Refreshed", ()=>null, "nice", "movin on")
-        return
-      }
-    })
-    FCMPlugin.getToken(
-      function(token){
-        if(memoized_getLoginCredentials() && websocket.readyState == websocket.OPEN)
-        senderFns(sendMsg, "FCM Message::" + token + "::" + memoized_getLoginCredentials())
-        else {
-          let Jim = setInterval(() => {
-            console.log("checking if credentials and websocket...")
-              if(memoized_getLoginCredentials() && websocket.readyState == websocket.OPEN) {
-                senderFns(sendMsg, "FCM Message::" + token + "::" + memoized_getLoginCredentials())
-                clearInterval(Jim)
-             }}, 30000)
-      }},
-      function(err){
-        navigator.notification.alert(err + " token error", ()=>null, "nice", "movin on")
-    });
-    FCMPlugin.onNotification(function(data){
-      var jim = data.sender
-      if(data.wasTapped){
-        //Notification was received on device tray and tapped by the user.
-        $.mobile.navigate( "#page1" );
-        // $("#page1 [data-email='" + jim + "']").trigger("click")
-        // $.mobile.navigate( "#chatview" );
-        console.log("Getting messages from " + jim)
-        $.mobile.navigate( "#chatview" );
-        $("#name_header2").text(jim)
-        $("#sendcv").attr("data-email", jim)
-        senderFns(sendMsg, "My Messages::" + jim);
-        do_rewrite_msg_recipient_options(jim)
-      }
-      else{
-        //Notification was received in foreground. Maybe the user needs to be notified.
-        navigator.notification.beep(1);
-        let pages= ["page1", "chatview", "mesg", "mesg_detail", "recipients", "send"]
-        let currentPage = $( "body" ).pagecontainer( "getActivePage" ).attr("id")
-        console.log("currentPage: ", $( "body" ).pagecontainer( "getActivePage" ).attr("id"))
-        switch (currentPage) {
-          case "page1":
-            $("#page1 [data-email='" + jim + "']").trigger("click")
-            break;
-          case "chatview":
-            //Statements executed when the result of expression matches value2
-            $("#page1 [data-email='" + jim + "']").trigger("click")
-            break;
-          case "mesg":
-            //Statements executed when the result of expression matches valueN
-            senderFns(sendMsg, "All Messages");
-            break;
-          default:
-            //Statements executed when none of the values match the value of the expression
-            $.mobile.navigate( "#" + currentPage );
-            break;
+    if (typeof FCMPlugin !== 'undefined') {
+      FCMPlugin.onTokenRefresh(function(token){
+        if (msgBody.length === 0) {
+          navigator.notification.alert("Token Refreshed", ()=>null, "nice", "movin on")
+          return
         }
+      })
+      FCMPlugin.getToken(
+        function(token){
+          if(memoized_getLoginCredentials() && websocket.readyState == websocket.OPEN)
+          senderFns(sendMsg, "FCM Message::" + token + "::" + memoized_getLoginCredentials())
+          else {
+            let Jim = setInterval(() => {
+              console.log("checking if credentials and websocket...")
+                if(memoized_getLoginCredentials() && websocket.readyState == websocket.OPEN) {
+                  senderFns(sendMsg, "FCM Message::" + token + "::" + memoized_getLoginCredentials())
+                  clearInterval(Jim)
+               }}, 30000)
+          }},
+        function(err){
+          navigator.notification.alert(err + " token error", ()=>null, "nice", "movin on")
+      });
+      FCMPlugin.onNotification(function(data){
+        var jim = data.sender
+        if(data.wasTapped){
+          //Notification was received on device tray and tapped by the user.
+          $.mobile.navigate( "#page1" );
+          // $("#page1 [data-email='" + jim + "']").trigger("click")
+          // $.mobile.navigate( "#chatview" );
+          console.log("Getting messages from " + jim)
+          $.mobile.navigate( "#chatview" );
+          $("#name_header2").text(jim)
+          $("#sendcv").attr("data-email", jim)
+          senderFns(sendMsg, "My Messages::" + jim);
+          do_rewrite_msg_recipient_options(jim)
+        }
+        else{
+          //Notification was received in foreground. Maybe the user needs to be notified.
+          navigator.notification.beep(1);
+          let pages= ["page1", "chatview", "mesg", "mesg_detail", "recipients", "send"]
+          let currentPage = $( "body" ).pagecontainer( "getActivePage" ).attr("id")
+          console.log("currentPage: ", $( "body" ).pagecontainer( "getActivePage" ).attr("id"))
+          switch (currentPage) {
+            case "page1":
+              $("#page1 [data-email='" + jim + "']").trigger("click")
+              break;
+            case "chatview":
+              //Statements executed when the result of expression matches value2
+              $("#page1 [data-email='" + jim + "']").trigger("click")
+              break;
+            case "mesg":
+              //Statements executed when the result of expression matches valueN
+              senderFns(sendMsg, "All Messages");
+              break;
+            default:
+              //Statements executed when none of the values match the value of the expression
+              $.mobile.navigate( "#" + currentPage );
+              break;
+          }
 
-      //jim = data.sender
-      //$("#page1 [data-email='" + jim + "']").trigger("click")
-      //$.mobile.navigate( "#chatview" );
-      }
-    })
-  pictureSource=navigator.camera.PictureSourceType;
-  destinationType=navigator.camera.DestinationType;
+        //jim = data.sender
+        //$("#page1 [data-email='" + jim + "']").trigger("click")
+        //$.mobile.navigate( "#chatview" );
+        }
+      })
+    }
+    
+    if (navigator.camera) {
+      pictureSource=navigator.camera.PictureSourceType;
+      destinationType=navigator.camera.DestinationType;
+    }
   }
 //--- END DEVICE STUFF ---//
 
@@ -1272,6 +1542,24 @@ const getStartingDate = () => {
     alert('Failed because: ' + message);
   }
 //--- END Photo Callbacks ---//
+
+// Set up a heartbeat to keep the connection alive
+function startHeartbeat() {
+  window.heartbeatInterval = setInterval(function() {
+    if(websocket.readyState === websocket.OPEN) {
+      websocket.send("ping");
+    } else {
+      connect();
+    }
+  }, 30000); // Send ping every 30 seconds
+}
+
+// Clear the heartbeat on disconnect
+function stopHeartbeat() {
+  if(window.heartbeatInterval) {
+    clearInterval(window.heartbeatInterval);
+  }
+}
 
 //--- BEGIN COMMENTED OUT ---//
   /*$(document).on("swipeleft", "#mesg_detail", e => {

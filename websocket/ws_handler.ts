@@ -76,6 +76,12 @@ async function handleRequest(req: Request): Promise<Response> {
           await handleGetAllMessages(socket, message);
         } else if (prefix === "Send Message") {
           await handleSendMessage(socket, message);
+        } else if (prefix === "Add Contact:") {
+          await handleAddContact(socket, message);
+        } else if (prefix === "Invite Frien") {
+          await handleInviteFriend(socket, message);
+        } else if (prefix === "Accept Invit") {
+          await handleAcceptInvitation(socket, message);
         } else {
           socket.send(`Bad (non-binary Message)! ${message}`);
         }
@@ -278,9 +284,12 @@ async function handleSendMessage(ws: WebSocket, message: string): Promise<void> 
     const respondTo = taskObj.task.data.respondTo;
     const email = taskObj.task.data.email;
     
-    // Insert into both tables
-    await dbAccess.insertMessageIntoUsers(guid, respondTo, task);
-    await dbAccess.insertMessageIntoExtUsers(guid, email, task);
+    // Use transaction to insert into both tables atomically
+    const success = await dbAccess.insertMessageWithTransaction(guid, respondTo, email, task);
+    
+    if (!success) {
+      throw new Error("Failed to insert message");
+    }
     
     // Send FCM notification
     fcm.sendNotification(email, respondTo);
@@ -289,5 +298,120 @@ async function handleSendMessage(ws: WebSocket, message: string): Promise<void> 
   } catch (error) {
     console.error("Error sending message:", error);
     ws.send(`Error: ${error.message}`);
+  }
+}
+async function handleAddContact(ws: WebSocket, message: string): Promise<void> {
+  const parts = message.split("::");
+  if (parts.length < 2) {
+    ws.send("Error: Invalid add contact format");
+    return;
+  }
+  
+  const friendEmail = parts[1];
+  let friendName = "";
+  
+  if (parts.length >= 3) {
+    friendName = parts[2];
+  }
+  
+  const user = authenticatedClients.get(ws);
+  if (!user) {
+    ws.send("Error: Not authenticated");
+    return;
+  }
+  
+  try {
+    const success = await dbAccess.addContact(user, friendEmail, friendName);
+    
+    if (success) {
+      ws.send(`Contact Added! ${friendEmail}`);
+      
+      // Refresh contacts list
+      const contacts = await dbAccess.getContacts(user);
+      const formattedResponse = formatContactsResponse(contacts);
+      ws.send(`Contacts Get Complete!  ${formattedResponse}`);
+    } else {
+      ws.send(`Contact Exists! ${friendEmail}`);
+    }
+  } catch (error) {
+    console.error("Error adding contact:", error);
+    ws.send(`Error adding contact: ${error.message}`);
+  }
+}
+
+/**
+ * Handle sending a friend invitation
+ */
+async function handleInviteFriend(ws: WebSocket, message: string): Promise<void> {
+  const parts = message.split("::");
+  if (parts.length < 2) {
+    ws.send("Error: Invalid invite friend format");
+    return;
+  }
+  
+  const friendEmail = parts[1];
+  let inviteMessage = "";
+  
+  if (parts.length >= 3) {
+    inviteMessage = parts[2];
+  }
+  
+  const user = authenticatedClients.get(ws);
+  if (!user) {
+    ws.send("Error: Not authenticated");
+    return;
+  }
+  
+  try {
+    const success = await dbAccess.sendFriendInvitation(user, friendEmail, inviteMessage);
+    
+    if (success) {
+      ws.send(`Invitation Sent! ${friendEmail}`);
+      
+      // Send FCM notification
+      fcm.sendNotification(friendEmail, user);
+    } else {
+      ws.send(`Error: Failed to send invitation to ${friendEmail}`);
+    }
+  } catch (error) {
+    console.error("Error sending friend invitation:", error);
+    ws.send(`Error sending invitation: ${error.message}`);
+  }
+}
+
+/**
+ * Handle accepting a friend invitation
+ */
+async function handleAcceptInvitation(ws: WebSocket, message: string): Promise<void> {
+  const parts = message.split("::");
+  if (parts.length < 2) {
+    ws.send("Error: Invalid accept invitation format");
+    return;
+  }
+  
+  const invitationGuid = parts[1];
+  
+  const user = authenticatedClients.get(ws);
+  if (!user) {
+    ws.send("Error: Not authenticated");
+    return;
+  }
+  
+  try {
+    const success = await dbAccess.acceptFriendInvitation(invitationGuid);
+    
+    if (success) {
+      ws.send(`Invitation Accepted! ${invitationGuid}`);
+      
+      // Refresh contacts list
+      const contacts = await dbAccess.getContacts(user);
+      const formattedResponse = formatContactsResponse(contacts);
+      ws.send(`Contacts Get Complete!  ${formattedResponse}`);
+    } else {
+      ws.send(`Error: Failed to accept invitation ${invitationGuid}`);
+    }
+  } catch (error) {
+    console.error("Error accepting invitation:", error);
+    ws.send(`Error accepting invitation: ${error.message}`);
   }
 }
